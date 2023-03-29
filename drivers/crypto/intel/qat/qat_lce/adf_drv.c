@@ -1,12 +1,92 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2024, Intel Corporation */
 
+#include <linux/delay.h>
+#include <linux/dma-mapping.h>
+#include <linux/iopoll.h>
 #include <linux/module.h>
 
 #include <adf_accel_devices.h>
 #include <adf_common_drv.h>
 
 #include "adf_lce_hw_data.h"
+
+/* Reset registers */
+#define LCE_PF_RSTGEN_CTRL	0x0104000CU
+#define LCE_PF_RSTGEN_STAT	0x01040008U
+
+static void lce_pf_wait_for_reset(const struct lce_hw_device *lcehw)
+{
+	int ret;
+	int val;
+
+	ret = read_poll_timeout(LCE_CSR_RD, val, val == 0,
+				10, 2 * USEC_PER_SEC, 1,
+				lcehw->iobase, LCE_PF_RSTGEN_CTRL);
+
+	if (ret) {
+		/* If reset state is not clear, force clear it */
+		LCE_CSR_WR(lcehw->iobase, LCE_PF_RSTGEN_CTRL, 0);
+		LCE_CSR_WR(lcehw->iobase, LCE_PF_RSTGEN_STAT, 1);
+		fsleep(11);
+	}
+}
+
+static void lce_pci_reset_done(struct pci_dev *pdev)
+{
+	const struct lce_hw_device *lcehw = dev_get_drvdata(&pdev->dev);
+
+	if (!lcehw)
+		return;
+
+	lce_pf_wait_for_reset(lcehw);
+}
+
+static int lce_pf_hw_init(struct lce_hw_device *lcehw)
+{
+	struct pci_dev *pdev = lcehw->pdev;
+	int ret;
+
+	ret = pci_enable_device(pdev);
+	if (ret)
+		return ret;
+
+	if (pci_request_regions(pdev, KBUILD_MODNAME)) {
+		ret = -EFAULT;
+		goto out_disable_dev;
+	}
+
+	lcehw->iobase = pci_iomap(pdev, 0, 0);
+	if (!lcehw->iobase) {
+		ret = -ENOMEM;
+		goto out_free_reg;
+	}
+
+	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
+	if (ret)
+		goto out_unmap;
+
+	lce_pf_wait_for_reset(lcehw);
+
+	return 0;
+
+out_unmap:
+	pci_iounmap(pdev, lcehw->iobase);
+out_free_reg:
+	pci_release_regions(pdev);
+out_disable_dev:
+	pci_disable_device(pdev);
+	return ret;
+}
+
+static void lce_pf_hw_deinit(struct lce_hw_device *lcehw)
+{
+	struct pci_dev *pdev = lcehw->pdev;
+
+	pci_iounmap(pdev, lcehw->iobase);
+	pci_release_regions(pdev);
+	pci_disable_device(pdev);
+}
 
 static int adf_lce_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
@@ -49,8 +129,14 @@ static int adf_lce_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto out_class_dec;
 	}
 
+	ret = lce_pf_hw_init(lcehw);
+	if (ret)
+		goto out_devmgr_rm;
+
 	return 0;
 
+out_devmgr_rm:
+	adf_devmgr_rm_dev(accel_dev, NULL);
 out_class_dec:
 	lce_class.instances--;
 	dev_set_drvdata(&pdev->dev, NULL);
@@ -64,6 +150,7 @@ static void adf_lce_remove(struct pci_dev *pdev)
 	if (!lcehw)
 		return;
 
+	lce_pf_hw_deinit(lcehw);
 	adf_devmgr_rm_dev(lcehw->accel_dev, NULL);
 	lce_class.instances--;
 	dev_set_drvdata(&pdev->dev, NULL);
@@ -76,11 +163,16 @@ static const struct pci_device_id adf_lce_pci_tbl[] = {
 };
 MODULE_DEVICE_TABLE(pci, adf_lce_pci_tbl);
 
+static const struct pci_error_handlers adf_lce_err_handler = {
+	.reset_done = lce_pci_reset_done,
+};
+
 static struct pci_driver adf_lce_driver = {
 	.name		= KBUILD_MODNAME,
 	.id_table	= adf_lce_pci_tbl,
 	.probe		= adf_lce_probe,
 	.remove		= adf_lce_remove,
+	.err_handler	= &adf_lce_err_handler,
 };
 module_pci_driver(adf_lce_driver);
 
