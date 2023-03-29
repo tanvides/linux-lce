@@ -107,6 +107,22 @@ config CRYPTO_DEV_QAT_C62XVF
 	  To compile this as a module, choose M here: the module
 	  will be called qat_c62xvf.
 
+config CRYPTO_DEV_QAT_LCE
+	tristate "Support for Intel(R) QAT LCE PF"
+	depends on PCI_MSI && (!CPU_BIG_ENDIAN || COMPILE_TEST)
+	select PCI_IOV
+	select CRYPTO_DEV_QAT
+	help
+	  Support for the Intel(R) QuickAssist Technology Lookaside
+	  Compute Engine (LCE) Physical Function found on Intel(R) IPU
+	  E2000 family of products. The driver provides PCI enumeration,
+	  mailbox-based negotiation with the LCE Control PF (CPF) and
+	  enables SR-IOV so that LCE VFs can be assigned to user-space
+	  stacks (vfio-pci, SPDK, DPDK).
+
+	  To compile this as a module, choose M here: the module
+	  will be called qat_lce.
+
 config CRYPTO_DEV_QAT_ERROR_INJECTION
 	bool "Support for Intel(R) QAT Devices Heartbeat Error Injection"
 	depends on CRYPTO_DEV_QAT
