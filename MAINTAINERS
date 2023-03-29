@@ -11703,6 +11703,12 @@ F:	drivers/spi/spi-ljca.c
 F:	drivers/usb/misc/usb-ljca.c
 F:	include/linux/usb/ljca.h
 
+INTEL LCE DRIVER
+M:	Purna Chandra Mandal <purna.chandra.mandal@intel.com>
+M:	Tanvi Desai <tanvi.desai@intel.com>
+S:	Maintained
+F:	drivers/misc/lce
+
 INTEL MANAGEMENT ENGINE (mei)
 M:	Alexander Usyskin <alexander.usyskin@intel.com>
 L:	linux-kernel@vger.kernel.org

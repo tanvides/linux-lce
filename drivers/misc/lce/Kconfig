@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config INTEL_LCE
+	tristate "Support for Intel(R) LCE PCI devices"
+	depends on PCI_MSI
+	help
+	  Support for Intel LCE Intel(R) QuickAssist Technology
+	  PCI Function for accelerating DMA, crypto and compression
+	  workloads. These PCI functions are available on Intel IPU
+	  family of products.
