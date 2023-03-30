@@ -19,6 +19,9 @@
 #define LCE_CSR_RD(csr_base, csr_offset)	\
 	readl((csr_base) + (csr_offset))
 
+/* Constants */
+#define LCE_APF_SRIOV_VF_MAX		1024
+
 /* msix interrupt related parameters */
 #define LCE_MAX_MSIX_VECTOR_NAME	ADF_MAX_MSIX_VECTOR_NAME
 
@@ -32,6 +35,9 @@ struct lce_msix {
  * @pdev:	backing PCI device.
  * @iobase:	BAR0 mapping.
  * @msix_entry:	per-vector bookkeeping.
+ * @mbx_lock:	serializes mailbox access.
+ * @msg_completion: signals CPF->PF response arrival.
+ * @mbx_resp:	last mailbox response payload.
  * @max_vecs:	number of allocated MSI-X vectors.
  *
  * LCE PF manages SR-IOV for user-space VF consumers (QATlib/vfio-pci)
@@ -43,6 +49,9 @@ struct lce_hw_device {
 	struct pci_dev *pdev;
 	void __iomem *iobase;
 	struct lce_msix *msix_entry;
+	struct mutex mbx_lock; /* serialize mbx access */
+	struct completion msg_completion;
+	u32 mbx_resp;
 	u32 max_vecs;
 };
 
@@ -50,5 +59,9 @@ extern struct adf_hw_device_class lce_class;
 
 int adf_lce_intr_init(struct lce_hw_device *lcehw);
 void adf_lce_intr_deinit(struct lce_hw_device *lcehw);
+
+int adf_lce_mbx_request_version(struct lce_hw_device *lcehw);
+int adf_lce_mbx_fetch_id(struct lce_hw_device *lcehw);
+int adf_lce_mbx_num_vf(struct lce_hw_device *lcehw);
 
 #endif /* ADF_LCE_HW_DATA_H_ */
