@@ -12,9 +12,21 @@
 #define LCE_CSR_RD(csr_base, csr_offset)	\
 	readl((csr_base) + (csr_offset))
 
+/* msix interrupt related parameters */
+#define LCE_MAX_MSIX_VECTOR_NAME	32
+
+struct lce_msix {
+	char name[LCE_MAX_MSIX_VECTOR_NAME];
+};
+
 struct lce_hw_device {
 	struct pci_dev *pdev;
 	void __iomem *iobase;
+	struct lce_msix *msix_entry;
+	u32 max_vecs;
 };
+
+int lce_intr_init(struct lce_hw_device *lcehw);
+void lce_intr_deinit(struct lce_hw_device *lcehw);
 
 #endif /* LCE_PRIVATE_H */

@@ -60,9 +60,17 @@ static int lce_pf_hw_init(struct lce_hw_device *lcehw)
 	}
 
 	lce_pf_wait_for_reset(lcehw);
+	pci_set_master(pdev);
+
+	ret = lce_intr_init(lcehw);
+	if (ret)
+		goto out_clear_master;
 
 	return 0;
 
+out_clear_master:
+	pci_clear_master(pdev);
+	pci_iounmap(pdev, lcehw->iobase);
 out_free_reg:
 	pci_release_regions(pdev);
 out_disable_dev:
@@ -74,6 +82,8 @@ static void lce_pf_hw_deinit(struct lce_hw_device *lcehw)
 {
 	struct pci_dev *pdev = lcehw->pdev;
 
+	lce_intr_deinit(lcehw);
+	pci_clear_master(pdev);
 	pci_iounmap(pdev, lcehw->iobase);
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
