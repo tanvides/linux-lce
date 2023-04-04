@@ -108,8 +108,27 @@ static void lce_pf_hw_deinit(struct lce_hw_device *lcehw)
 	lce_intr_deinit(lcehw);
 	pci_clear_master(pdev);
 	pci_iounmap(pdev, lcehw->iobase);
+	pci_disable_sriov(pdev);
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
+}
+
+static int lce_pci_sriov_configure(struct pci_dev *pdev, int vfs)
+{
+	int ret;
+
+	if (vfs > 0) {
+		ret = pci_enable_sriov(pdev, vfs);
+		if (ret)
+			return ret;
+
+		return vfs;
+	}
+
+	if (pci_num_vf(pdev))
+		pci_disable_sriov(pdev);
+
+	return 0;
 }
 
 static int lce_probe(struct pci_dev *pdev, const struct pci_device_id *id)
@@ -158,6 +177,7 @@ static struct pci_driver lce_pci_driver = {
 	.probe = lce_probe,
 	.remove = lce_remove,
 	.err_handler = &lce_pci_err_handler,
+	.sriov_configure = lce_pci_sriov_configure,
 };
 module_pci_driver(lce_pci_driver);
 
