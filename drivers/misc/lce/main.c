@@ -42,6 +42,7 @@ static void lce_pci_reset_done(struct pci_dev *pdev)
 static int lce_pf_hw_init(struct lce_hw_device *lcehw)
 {
 	struct pci_dev *pdev = lcehw->pdev;
+	int max_vfs;
 	int ret;
 
 	ret = pci_enable_device(pdev);
@@ -66,8 +67,30 @@ static int lce_pf_hw_init(struct lce_hw_device *lcehw)
 	if (ret)
 		goto out_clear_master;
 
+	/* Request version from CPF */
+	ret = lce_mbx_request_version(lcehw);
+	if (ret)
+		goto out_free_irq;
+
+	ret = lce_mbx_fetch_id(lcehw);
+	if (ret)
+		goto out_free_irq;
+
+	max_vfs = lce_mbx_num_vf(lcehw);
+	if (max_vfs > LCE_APF_SRIOV_VF_MAX) {
+		dev_err(&pdev->dev, "invalid number of SR-IOV VFs");
+		ret = -EINVAL;
+		goto out_free_irq;
+	}
+
+	ret = pci_sriov_set_totalvfs(lcehw->pdev, max_vfs);
+	if (ret)
+		goto out_free_irq;
+
 	return 0;
 
+out_free_irq:
+	lce_intr_deinit(lcehw);
 out_clear_master:
 	pci_clear_master(pdev);
 	pci_iounmap(pdev, lcehw->iobase);
