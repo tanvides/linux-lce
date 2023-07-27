@@ -4126,6 +4126,33 @@ static int nvme_disable_and_flr(struct pci_dev *dev, bool probe)
 	return 0;
 }
 
+#define LCE_VF_CPF2VM_MBX_REG	0x1010
+/*
+ * Intel LCE VFs may sometime take longer than 500ms to complete reset.
+ *
+ * LCE VF driver relies on specific VF_RESET_DONE magic in specific
+ * mailbox register to confirm completion of reset. However, IPU
+ * firmware does not clear this specific register during reset-prep.
+ * So, clear the mailbox register content before initiating VF reset.
+ */
+static int lce_clear_mbx_before_flr(struct pci_dev *dev, bool probe)
+{
+	void __iomem *bar;
+
+	if (probe)
+		return pcie_reset_flr(dev, PCI_RESET_PROBE);
+
+	bar = pci_iomap(dev, 4, 0);
+	if (!bar)
+		return -ENOTTY;
+
+	writel(0, bar + LCE_VF_CPF2VM_MBX_REG);
+	pci_iounmap(dev, bar);
+
+	pcie_flr(dev);
+	return 0;
+}
+
 /*
  * Some NVMe controllers such as Intel DC P3700 and Solidigm P44 Pro will
  * timeout waiting for ready status to change after NVMe enable if the driver
@@ -4218,6 +4245,7 @@ static const struct pci_dev_reset_methods pci_dev_reset_methods[] = {
 	{ PCI_VENDOR_ID_SAMSUNG, 0xa804, nvme_disable_and_flr },
 	{ PCI_VENDOR_ID_INTEL, 0x0953, delay_250ms_after_flr },
 	{ PCI_VENDOR_ID_INTEL, 0x0a54, delay_250ms_after_flr },
+	{ PCI_VENDOR_ID_INTEL, 0x1454, lce_clear_mbx_before_flr },
 	{ PCI_VENDOR_ID_SOLIDIGM, 0xf1ac, delay_250ms_after_flr },
 	{ PCI_VENDOR_ID_CHELSIO, PCI_ANY_ID,
 		reset_chelsio_generic_dev },
