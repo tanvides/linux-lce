@@ -63,12 +63,12 @@ static int lce_pf_hw_init(struct lce_hw_device *lcehw)
 		goto out_free_reg;
 	}
 
-	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
-	if (ret)
-		goto out_unmap;
-
 	lce_pf_wait_for_reset(lcehw);
 	pci_set_master(pdev);
+
+	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
+	if (ret)
+		goto out_clear_master;
 
 	ret = adf_lce_intr_init(lcehw);
 	if (ret)
@@ -94,13 +94,22 @@ static int lce_pf_hw_init(struct lce_hw_device *lcehw)
 	if (ret)
 		goto out_free_irq;
 
+	/* Negotiate ring pair allocation with CPF */
+	ret = adf_lce_mbx_alloc_qs(lcehw);
+	if (ret <= 0) {
+		dev_err(&pdev->dev, "QS_ALLOC failed: %d ring pairs\n", ret);
+		ret = ret ? ret : -ENODEV;
+		goto out_free_irq;
+	}
+	lcehw->num_banks = ret;
+	dev_dbg(&pdev->dev, "CPF assigned %u ring pairs\n", lcehw->num_banks);
+
 	return 0;
 
 out_free_irq:
 	adf_lce_intr_deinit(lcehw);
 out_clear_master:
 	pci_clear_master(pdev);
-out_unmap:
 	pci_iounmap(pdev, lcehw->iobase);
 out_free_reg:
 	pci_release_regions(pdev);
@@ -183,6 +192,7 @@ static int adf_lce_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	ret = lce_pf_hw_init(lcehw);
 	if (ret)
 		goto out_devmgr_rm;
+
 
 	return 0;
 
