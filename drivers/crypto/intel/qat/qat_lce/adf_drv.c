@@ -10,6 +10,7 @@
 #include <adf_common_drv.h>
 
 #include "adf_lce_hw_data.h"
+#include "adf_lce_comp.h"
 
 /* Reset registers */
 #define LCE_PF_RSTGEN_CTRL	0x0104000CU
@@ -193,6 +194,9 @@ static int adf_lce_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (ret)
 		goto out_devmgr_rm;
 
+	ret = lce_comp_algs_register(lcehw);
+	if (ret)
+		dev_warn(&pdev->dev, "Failed to register comp algs\n");
 
 	return 0;
 
@@ -211,6 +215,7 @@ static void adf_lce_remove(struct pci_dev *pdev)
 	if (!lcehw)
 		return;
 
+	lce_comp_algs_unregister(lcehw);
 	lce_pf_hw_deinit(lcehw);
 	adf_devmgr_rm_dev(lcehw->accel_dev, NULL);
 	lce_class.instances--;

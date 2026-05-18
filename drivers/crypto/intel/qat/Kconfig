@@ -112,13 +112,15 @@ config CRYPTO_DEV_QAT_LCE
 	depends on PCI_MSI && (!CPU_BIG_ENDIAN || COMPILE_TEST)
 	select PCI_IOV
 	select CRYPTO_DEV_QAT
+	select CRYPTO_ACOMP2
+	select CRYPTO_DEFLATE
 	help
 	  Support for the Intel(R) QuickAssist Technology Lookaside
 	  Compute Engine (LCE) Physical Function found on Intel(R) IPU
 	  E2000 family of products. The driver provides PCI enumeration,
-	  mailbox-based negotiation with the LCE Control PF (CPF) and
-	  enables SR-IOV so that LCE VFs can be assigned to user-space
-	  stacks (vfio-pci, SPDK, DPDK).
+	  mailbox-based negotiation with the LCE Control PF (CPF),
+	  deflate compression offload via the crypto acomp API, and
+	  SR-IOV VF management.
 
 	  To compile this as a module, choose M here: the module
 	  will be called qat_lce.
