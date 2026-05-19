@@ -11703,6 +11703,12 @@ F:	drivers/spi/spi-ljca.c
 F:	drivers/usb/misc/usb-ljca.c
 F:	include/linux/usb/ljca.h
 
+INTEL LCE DRIVER
+M:	Tanvi Desai <tanvi.desai@intel.com>
+L:	qat-linux@intel.com
+S:	Maintained
+F:	drivers/crypto/intel/qat/qat_lce/
+
 INTEL MANAGEMENT ENGINE (mei)
 M:	Alexander Usyskin <alexander.usyskin@intel.com>
 L:	linux-kernel@vger.kernel.org
