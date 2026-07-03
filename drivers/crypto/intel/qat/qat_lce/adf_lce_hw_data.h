@@ -43,7 +43,7 @@ struct lce_hw_device {
 	struct task_struct *poll_thread;
 };
 
-void adf_init_hw_data_lce(struct adf_hw_device_data *hw_data);
+void adf_init_hw_data_lce(struct adf_hw_device_data *hw_data, u32 num_banks);
 void adf_clean_hw_data_lce(struct adf_hw_device_data *hw_data);
 
 #endif /* ADF_LCE_HW_DATA_H_ */
