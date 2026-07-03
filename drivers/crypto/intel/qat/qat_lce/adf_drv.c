@@ -13,6 +13,7 @@
 
 #include "adf_lce_hw_data.h"
 #include "adf_lce_mbx.h"
+#include "adf_lce_poll.h"
 
 /* PF reset registers */
 #define LCE_PF_RSTGEN_CTRL	0x0104000CU
@@ -211,6 +212,10 @@ static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (ret)
 		goto out_err_dev_stop;
 
+	ret = adf_lce_poll_start(lcehw);
+	if (ret)
+		goto out_err_dev_stop;
+
 	return 0;
 
 out_err_dev_stop:
@@ -233,6 +238,7 @@ static void adf_remove(struct pci_dev *pdev)
 		return;
 
 	accel_dev = lcehw->accel_dev;
+	adf_lce_poll_stop(lcehw);
 	adf_dev_down(accel_dev);
 	adf_lce_mbx_free_qs(lcehw);
 	adf_lce_mbx_cleanup(lcehw);
