@@ -7,7 +7,11 @@
 #include <adf_cfg.h>
 #include <adf_cfg_services.h>
 #include <adf_common_drv.h>
+#include <adf_dc.h>
 #include <adf_gen6_shared.h>
+
+#include "icp_qat_fw_comp.h"
+#include "icp_qat_hw_51_comp.h"
 
 #include "adf_lce_hw_data.h"
 #include "adf_lce_isr.h"
@@ -124,6 +128,57 @@ static int lce_dev_config(struct adf_accel_dev *accel_dev)
 	return 0;
 }
 
+static int adf_lce_build_comp_block(void *ctx, enum adf_dc_algo algo)
+{
+	struct icp_qat_fw_comp_req *req_tmpl = ctx;
+	struct icp_qat_fw_comp_req_hdr_cd_pars *cd_pars = &req_tmpl->cd_pars;
+	struct icp_qat_hw_comp_51_config_csr_lower hw_comp_lower_csr = { };
+	struct icp_qat_fw_comn_req_hdr *header = &req_tmpl->comn_hdr;
+	u32 lower_val;
+
+	switch (algo) {
+	case QAT_DEFLATE:
+		header->service_cmd_id = ICP_QAT_FW_COMP_CMD_DYNAMIC;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	hw_comp_lower_csr.lllbd = ICP_QAT_HW_COMP_51_LLLBD_CTRL_LLLBD_DISABLED;
+	hw_comp_lower_csr.sd = ICP_QAT_HW_COMP_51_SEARCH_DEPTH_LEVEL_1;
+	lower_val = ICP_QAT_FW_COMP_51_BUILD_CONFIG_LOWER(hw_comp_lower_csr);
+	cd_pars->u.sl.comp_slice_cfg_word[0] = lower_val;
+	cd_pars->u.sl.comp_slice_cfg_word[1] = 0;
+
+	return 0;
+}
+
+static int adf_lce_build_decomp_block(void *ctx, enum adf_dc_algo algo)
+{
+	struct icp_qat_fw_comp_req *req_tmpl = ctx;
+	struct icp_qat_fw_comp_req_hdr_cd_pars *cd_pars = &req_tmpl->cd_pars;
+	struct icp_qat_fw_comn_req_hdr *header = &req_tmpl->comn_hdr;
+
+	switch (algo) {
+	case QAT_DEFLATE:
+		header->service_cmd_id = ICP_QAT_FW_COMP_CMD_DECOMPRESS;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	cd_pars->u.sl.comp_slice_cfg_word[0] = 0;
+	cd_pars->u.sl.comp_slice_cfg_word[1] = 0;
+
+	return 0;
+}
+
+static void adf_lce_init_dc_ops(struct adf_dc_ops *dc_ops)
+{
+	dc_ops->build_comp_block = adf_lce_build_comp_block;
+	dc_ops->build_decomp_block = adf_lce_build_decomp_block;
+}
+
 void adf_init_hw_data_lce(struct adf_hw_device_data *hw_data, u32 num_banks)
 {
 	hw_data->dev_class = &lce_class;
@@ -156,6 +211,7 @@ void adf_init_hw_data_lce(struct adf_hw_device_data *hw_data, u32 num_banks)
 	hw_data->pfvf_ops.enable_comms = enable_pfvf_comms;
 
 	adf_gen6_init_hw_csr_ops(&hw_data->csr_ops);
+	adf_lce_init_dc_ops(&hw_data->dc_ops);
 }
 
 void adf_clean_hw_data_lce(struct adf_hw_device_data *hw_data)
