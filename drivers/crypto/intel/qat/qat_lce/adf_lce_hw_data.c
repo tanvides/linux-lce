@@ -124,10 +124,11 @@ static int lce_dev_config(struct adf_accel_dev *accel_dev)
 	return 0;
 }
 
-void adf_init_hw_data_lce(struct adf_hw_device_data *hw_data)
+void adf_init_hw_data_lce(struct adf_hw_device_data *hw_data, u32 num_banks)
 {
 	hw_data->dev_class = &lce_class;
 	hw_data->instance_id = lce_class.instances++;
+	hw_data->num_banks = num_banks;
 	hw_data->num_banks_per_vf = 1;
 	hw_data->num_rings_per_bank = ADF_LCE_NUM_RINGS_PER_BANK;
 	hw_data->num_accel = 1;
