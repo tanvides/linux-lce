@@ -58,6 +58,17 @@ static void lce_pci_reset_done(struct pci_dev *pdev)
 		lce_pf_wait_for_reset(bar->virt_addr);
 }
 
+static int adf_lce_sriov_configure(struct pci_dev *pdev, int vfs)
+{
+	if (vfs > 0)
+		return pci_enable_sriov(pdev, vfs);
+
+	if (pci_num_vf(pdev))
+		pci_disable_sriov(pdev);
+
+	return 0;
+}
+
 static void adf_cleanup_accel(struct adf_accel_dev *accel_dev)
 {
 	if (accel_dev->hw_device) {
@@ -176,6 +187,10 @@ static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto out_mbx_cleanup;
 	}
 
+	ret = pci_sriov_set_totalvfs(pdev, max_vfs);
+	if (ret)
+		goto out_mbx_cleanup;
+
 	adf_lce_mbx_free_qs(lcehw);
 	ret = adf_lce_mbx_alloc_qs(lcehw);
 	if (ret <= 0) {
@@ -221,6 +236,7 @@ static void adf_remove(struct pci_dev *pdev)
 	adf_dev_down(accel_dev);
 	adf_lce_mbx_free_qs(lcehw);
 	adf_lce_mbx_cleanup(lcehw);
+	pci_disable_sriov(pdev);
 	adf_cleanup_accel(accel_dev);
 	dev_set_drvdata(&pdev->dev, NULL);
 }
@@ -235,6 +251,7 @@ static struct pci_driver adf_lce_driver = {
 	.probe		 = adf_probe,
 	.remove		 = adf_remove,
 	.err_handler	 = &adf_lce_err_handler,
+	.sriov_configure = adf_lce_sriov_configure,
 };
 module_pci_driver(adf_lce_driver);
 
