@@ -36,7 +36,6 @@
  * @mbx_lock:	serializes mailbox access.
  * @mbx_resp:	last mailbox response payload.
  * @num_banks:	number of ring bundles assigned by CPF (from QS_ALLOC).
- * @poll_thread: response polling kthread (see adf_lce_poll.c).
  */
 struct lce_hw_device {
 	struct adf_accel_dev *accel_dev;
@@ -45,10 +44,9 @@ struct lce_hw_device {
 	struct mutex mbx_lock; /* serialize mailbox transactions */
 	u32 mbx_resp;
 	u32 num_banks;
-	struct task_struct *poll_thread;
 };
 
-void adf_init_hw_data_lce(struct adf_hw_device_data *hw_data);
+void adf_init_hw_data_lce(struct adf_hw_device_data *hw_data, u32 num_banks);
 void adf_clean_hw_data_lce(struct adf_hw_device_data *hw_data);
 
 #endif /* ADF_LCE_HW_DATA_H_ */

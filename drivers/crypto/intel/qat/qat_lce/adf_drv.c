@@ -12,6 +12,7 @@
 #include <adf_common_drv.h>
 
 #include "adf_lce_hw_data.h"
+#include "adf_lce_mbx.h"
 
 /* PF reset registers */
 #define LCE_PF_RSTGEN_CTRL	0x0104000CU
@@ -74,6 +75,7 @@ static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct adf_hw_device_data *hw_data;
 	struct lce_hw_device *lcehw;
 	struct adf_bar *bar;
+	int max_vfs;
 	int ret;
 
 	if (num_possible_nodes() > 1 && dev_to_node(&pdev->dev) < 0)
@@ -149,10 +151,58 @@ static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	pci_set_master(pdev);
 	lce_pf_wait_for_reset(lcehw->iobase);
 
-	adf_init_hw_data_lce(hw_data);
+	/*
+	 * Mailbox negotiation with the CPF must complete before
+	 * adf_dev_up(): the number of ring bundles assigned by the CPF
+	 * (via QS_ALLOC) is required for transport ring allocation.
+	 * Communication is polled from the CPF2APF register so no MSI-X
+	 * vectors are needed at this stage.
+	 */
+	adf_lce_mbx_init(lcehw);
+
+	ret = adf_lce_mbx_request_version(lcehw);
+	if (ret)
+		goto out_mbx_cleanup;
+
+	ret = adf_lce_mbx_fetch_id(lcehw);
+	if (ret)
+		goto out_mbx_cleanup;
+
+	max_vfs = adf_lce_mbx_num_vf(lcehw);
+	if (max_vfs > LCE_APF_SRIOV_VF_MAX) {
+		ret = dev_err_probe(&pdev->dev, -EINVAL,
+				    "Invalid number of SR-IOV VFs: %d\n",
+				    max_vfs);
+		goto out_mbx_cleanup;
+	}
+
+	adf_lce_mbx_free_qs(lcehw);
+	ret = adf_lce_mbx_alloc_qs(lcehw);
+	if (ret <= 0) {
+		ret = dev_err_probe(&pdev->dev, ret ? ret : -ENODEV,
+				    "QS_ALLOC failed: %d ring pairs\n", ret);
+		goto out_mbx_cleanup;
+	}
+	lcehw->num_banks = ret;
+	dev_dbg(&pdev->dev, "CPF assigned %u ring pairs\n", lcehw->num_banks);
+
+	adf_init_hw_data_lce(hw_data, lcehw->num_banks);
+
+	ret = adf_cfg_dev_add(accel_dev);
+	if (ret)
+		goto out_mbx_cleanup;
+
+	ret = adf_dev_up(accel_dev, true);
+	if (ret)
+		goto out_err_dev_stop;
 
 	return 0;
 
+out_err_dev_stop:
+	adf_dev_down(accel_dev);
+out_mbx_cleanup:
+	adf_lce_mbx_free_qs(lcehw);
+	adf_lce_mbx_cleanup(lcehw);
 out_err:
 	adf_cleanup_accel(accel_dev);
 	dev_set_drvdata(&pdev->dev, NULL);
@@ -168,6 +218,9 @@ static void adf_remove(struct pci_dev *pdev)
 		return;
 
 	accel_dev = lcehw->accel_dev;
+	adf_dev_down(accel_dev);
+	adf_lce_mbx_free_qs(lcehw);
+	adf_lce_mbx_cleanup(lcehw);
 	adf_cleanup_accel(accel_dev);
 	dev_set_drvdata(&pdev->dev, NULL);
 }
