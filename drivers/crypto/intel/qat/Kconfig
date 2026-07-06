@@ -81,6 +81,22 @@ config CRYPTO_DEV_QAT_6XXX
 	  To compile this as a module, choose M here: the module
 	  will be called qat_6xxx.
 
+config CRYPTO_DEV_QAT_LCE
+	tristate "Support for Intel(R) QuickAssist Technology LCE PF"
+	depends on (X86 || COMPILE_TEST)
+	depends on PCI
+	select PCI_IOV
+	select CRYPTO_DEV_QAT
+	help
+	  Support for Intel(R) QuickAssist Technology Lightweight
+	  Compression Engine (LCE) PCI Physical Function driver. LCE is
+	  a compression-only accelerator managed jointly by the host PF
+	  driver and an on-die Control PF (CPF) that owns ring bundle
+	  allocation and MSI-X routing.
+
+	  To compile this as a module, choose M here: the module
+	  will be called qat_lce.
+
 config CRYPTO_DEV_QAT_DH895xCCVF
 	tristate "Support for Intel(R) DH895xCC Virtual Function"
 	depends on PCI && (!CPU_BIG_ENDIAN || COMPILE_TEST)
