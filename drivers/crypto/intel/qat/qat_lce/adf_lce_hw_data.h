@@ -23,6 +23,11 @@
 #define LCE_CSR_WR(base, off, val)	writel((val), (base) + (off))
 #define LCE_CSR_RD(base, off)		readl((base) + (off))
 
+/* CPF <-> APF mailbox and misc-interrupt-mask registers (BAR0). */
+#define LCE_PF_INT_MASK			0x01100004U
+#define LCE_MBX_APF2CPF			0x01100008U
+#define LCE_MBX_CPF2APF			0x0110000CU
+
 /**
  * struct lce_hw_device - LCE PF private state.
  * @accel_dev:	parent QAT acceleration device.

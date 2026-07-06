@@ -10,6 +10,7 @@
 #include <adf_gen6_shared.h>
 
 #include "adf_lce_hw_data.h"
+#include "adf_lce_isr.h"
 
 #define ADF_LCE_NUM_RINGS_PER_BANK	2
 #define ADF_LCE_TX_RINGS_MASK		0x1
@@ -134,6 +135,8 @@ void adf_init_hw_data_lce(struct adf_hw_device_data *hw_data)
 	hw_data->num_logical_accel = 1;
 	hw_data->tx_rx_gap = ADF_LCE_RX_RINGS_OFFSET;
 	hw_data->tx_rings_mask = ADF_LCE_TX_RINGS_MASK;
+	hw_data->alloc_irq = adf_lce_isr_resource_alloc;
+	hw_data->free_irq = adf_lce_isr_resource_free;
 	hw_data->enable_error_correction = enable_error_correction;
 	hw_data->get_accel_mask = get_accel_mask;
 	hw_data->get_ae_mask = get_ae_mask;
