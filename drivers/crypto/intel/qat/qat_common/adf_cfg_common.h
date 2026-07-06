@@ -50,6 +50,7 @@ enum adf_device_type {
 	DEV_4XXX,
 	DEV_420XX,
 	DEV_6XXX,
+	DEV_LCE,
 };
 
 struct adf_dev_status_info {
