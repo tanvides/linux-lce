@@ -2,6 +2,7 @@
 /* Copyright(c) 2026 Intel Corporation */
 
 #include <linux/iopoll.h>
+#include <linux/interrupt.h>
 #include <linux/mutex.h>
 
 #include "adf_61mx_hw_data.h"
@@ -200,4 +201,19 @@ int adf_61mx_mbx_free_qs(struct adf_61mx_dev *hwdev)
 		dev_err(to_dev(hwdev), "mbx QS_FREE failed\n");
 	mutex_unlock(&hwdev->mbx_lock);
 	return ret;
+}
+
+irqreturn_t adf_61mx_mbx_isr(int irq, void *dev_ptr)
+{
+	struct adf_accel_dev *accel_dev = dev_ptr;
+	struct adf_61mx_dev *hwdev = pci_get_drvdata(accel_to_pci_dev(accel_dev));
+
+	/* Ack the CPF->APF mailbox event by clearing the register. The
+	 * mailbox reply path itself is polled; this handler only quiesces
+	 * the control vector so the line does not stay asserted.
+	 */
+	ADF_61MX_CSR_RD(hwdev->iobase, ADF_61MX_MBX_CPF2APF);
+	ADF_61MX_CSR_WR(hwdev->iobase, ADF_61MX_MBX_CPF2APF, 0);
+
+	return IRQ_HANDLED;
 }
