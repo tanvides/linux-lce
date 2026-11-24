@@ -125,6 +125,25 @@ out:
 	return ret;
 }
 
+int adf_61mx_mbx_num_vf(struct adf_61mx_dev *hwdev)
+{
+	int ret;
+
+	mutex_lock(&hwdev->mbx_lock);
+	ret = adf_61mx_mbx_xchange(hwdev, ADF_61MX_MBX_OP_PF_SRIOV_VF, 0);
+	if (ret) {
+		dev_err(to_dev(hwdev), "mbx OP_SRIOV_VF failed\n");
+		ret = 0;
+		goto out;
+	}
+
+	ret = hwdev->mbx_resp;
+
+out:
+	mutex_unlock(&hwdev->mbx_lock);
+	return ret;
+}
+
 int adf_61mx_mbx_alloc_qs(struct adf_61mx_dev *hwdev)
 {
 	int ret;

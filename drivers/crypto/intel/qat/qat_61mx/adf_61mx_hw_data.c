@@ -65,6 +65,14 @@ static int send_admin_init(struct adf_accel_dev *accel_dev)
 	return 0;
 }
 
+static void disable_iov(struct adf_accel_dev *accel_dev)
+{
+	struct pci_dev *pdev = accel_to_pci_dev(accel_dev);
+
+	if (pci_num_vf(pdev))
+		pci_disable_sriov(pdev);
+}
+
 static int enable_pfvf_comms(struct adf_accel_dev *accel_dev)
 {
 	/* GEN61 PF-VF signalling is handled by the CPF, not by the QAT
@@ -90,6 +98,7 @@ void adf_init_hw_data_61mx(struct adf_hw_device_data *hw_data)
 	hw_data->get_sku = get_sku;
 	hw_data->send_admin_init = send_admin_init;
 	hw_data->enable_ints = enable_ints;
+	hw_data->disable_iov = disable_iov;
 	hw_data->pfvf_ops.enable_comms = enable_pfvf_comms;
 }
 

@@ -11,6 +11,11 @@
 
 #include <adf_accel_devices.h>
 
+/* Upper limit on VFs advertised by the APF; the CPF-side firmware
+ * cannot expose more than this per PF regardless of BAR configuration.
+ */
+#define ADF_61MX_APF_SRIOV_VF_MAX		1024
+
 #define ADF_61MX_CSR_WR(base, off, val)	writel((val), (base) + (off))
 #define ADF_61MX_CSR_RD(base, off)		readl((base) + (off))
 
