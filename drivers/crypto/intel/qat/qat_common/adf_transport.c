@@ -349,6 +349,7 @@ void adf_response_handler(uintptr_t bank_addr)
 	csr_ops->write_csr_int_flag_and_col(bank->csr_addr, bank->bank_number,
 					    bank->irq_mask);
 }
+EXPORT_SYMBOL_GPL(adf_response_handler);
 
 static inline int adf_get_cfg_int(struct adf_accel_dev *accel_dev,
 				  const char *section, const char *format,
