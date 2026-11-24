@@ -13,6 +13,7 @@
 #include <adf_dbgfs.h>
 
 #include "adf_61mx_hw_data.h"
+#include "adf_61mx_mbx.h"
 
 /* PF reset registers */
 #define ADF_61MX_PF_RSTGEN_CTRL	0x0104000CU
@@ -77,6 +78,51 @@ static void adf_cleanup_hw_data(void *accel_dev)
 static void adf_devmgr_remove(void *accel_dev)
 {
 	adf_devmgr_rm_dev(accel_dev, NULL);
+}
+
+static void adf_61mx_mbx_teardown(void *hwdev)
+{
+	adf_61mx_mbx_cleanup(hwdev);
+}
+
+static void adf_61mx_release_qs(void *hwdev)
+{
+	adf_61mx_mbx_free_qs(hwdev);
+}
+
+/*
+ * Negotiate with the CPF over the polled mailbox. This must complete before
+ * adf_dev_up(): the number of ring bundles assigned by the CPF is needed to
+ * set up the transport.
+ */
+static int adf_61mx_cpf_negotiate(struct adf_61mx_dev *hwdev)
+{
+	struct device *dev = &hwdev->pdev->dev;
+	int ret;
+
+	adf_61mx_mbx_init(hwdev);
+
+	ret = devm_add_action_or_reset(dev, adf_61mx_mbx_teardown, hwdev);
+	if (ret)
+		return ret;
+
+	ret = adf_61mx_mbx_request_version(hwdev);
+	if (ret)
+		return dev_err_probe(dev, ret, "CPF version negotiation failed.\n");
+
+	ret = adf_61mx_mbx_fetch_id(hwdev);
+	if (ret)
+		return dev_err_probe(dev, ret, "CPF identification failed.\n");
+
+	/* Release ring pairs a previous instance may have left allocated */
+	adf_61mx_mbx_free_qs(hwdev);
+	ret = adf_61mx_mbx_alloc_qs(hwdev);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Failed to allocate ring pairs.\n");
+	hwdev->num_banks = ret;
+	dev_dbg(dev, "CPF assigned %u ring pairs\n", hwdev->num_banks);
+
+	return devm_add_action_or_reset(dev, adf_61mx_release_qs, hwdev);
 }
 
 static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -148,6 +194,10 @@ static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	pci_set_master(pdev);
 	adf_61mx_pf_wait_for_reset(hwdev->iobase);
+
+	ret = adf_61mx_cpf_negotiate(hwdev);
+	if (ret)
+		return ret;
 
 	accel_dev->hw_device = hw_data;
 	adf_init_hw_data_61mx(hw_data);
