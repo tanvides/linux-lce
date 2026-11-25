@@ -11,6 +11,7 @@
 
 #include <adf_accel_devices.h>
 #include <adf_cfg.h>
+#include <adf_cfg_strings.h>
 #include <adf_common_drv.h>
 #include <adf_dbgfs.h>
 
@@ -95,6 +96,11 @@ static int adf_61mx_sriov_configure(struct pci_dev *pdev, int vfs)
 	return 0;
 }
 
+static void adf_device_down(void *accel_dev)
+{
+	adf_dev_down(accel_dev);
+}
+
 static void adf_dbgfs_cleanup(void *accel_dev)
 {
 	adf_dbgfs_exit(accel_dev);
@@ -128,6 +134,22 @@ static void adf_61mx_mbx_teardown(void *hwdev)
 static void adf_61mx_disable_sriov(void *pdev)
 {
 	pci_disable_sriov(pdev);
+}
+
+/* Crypto services run on VFs; the PF offloads none of them */
+static int adf_61mx_cfg_dev_init(struct adf_accel_dev *accel_dev)
+{
+	int ret;
+
+	ret = adf_cfg_section_add(accel_dev, ADF_GENERAL_SEC);
+	if (ret)
+		return ret;
+
+	return adf_cfg_add_key_value_param(accel_dev, ADF_GENERAL_SEC,
+					   ADF_SERVICES_ENABLED,
+					   ADF_CFG_SYM ADF_SERVICES_DELIMITER
+					   ADF_CFG_ASYM,
+					   ADF_STR);
 }
 
 /*
@@ -246,7 +268,7 @@ static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		return ret;
 
 	accel_dev->hw_device = hw_data;
-	adf_init_hw_data_61mx(hw_data);
+	adf_init_hw_data_61mx(hw_data, hwdev->num_banks);
 
 	ret = devm_add_action_or_reset(dev, adf_cleanup_hw_data, accel_dev);
 	if (ret)
@@ -259,6 +281,10 @@ static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	ret = devm_add_action_or_reset(dev, adf_cfg_device_remove, accel_dev);
 	if (ret)
 		return ret;
+
+	ret = adf_61mx_cfg_dev_init(accel_dev);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to initialize configuration.\n");
 
 	/*
 	 * The PCI config space is saved at this point and will be restored
@@ -275,7 +301,31 @@ static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret)
 		return ret;
 
-	return devm_add_action_or_reset(dev, adf_61mx_disable_sriov, pdev);
+	if (hwdev->num_banks) {
+		ret = adf_dev_up(accel_dev, true);
+		if (ret)
+			return ret;
+
+		ret = devm_add_action_or_reset(dev, adf_device_down, accel_dev);
+		if (ret)
+			return ret;
+	} else {
+		dev_info(dev, "No ring pairs assigned by the CPF, SR-IOV only.\n");
+	}
+
+	/* VFs must be gone before the PF is brought down */
+	ret = devm_add_action_or_reset(dev, adf_61mx_disable_sriov, pdev);
+	if (ret)
+		return ret;
+
+	return adf_sysfs_init(accel_dev);
+}
+
+static void adf_shutdown(struct pci_dev *pdev)
+{
+	struct adf_accel_dev *accel_dev = adf_devmgr_pci_to_accel_dev(pdev);
+
+	adf_dev_down(accel_dev);
 }
 
 static const struct pci_error_handlers adf_61mx_err_handler = {
@@ -286,6 +336,7 @@ static struct pci_driver adf_driver = {
 	.id_table = adf_pci_tbl,
 	.name = ADF_61MX_DEVICE_NAME,
 	.probe = adf_probe,
+	.shutdown = adf_shutdown,
 	.sriov_configure = adf_61mx_sriov_configure,
 	.err_handler = &adf_61mx_err_handler,
 };

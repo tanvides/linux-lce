@@ -38,7 +38,10 @@ struct adf_61mx_dev {
 	u32 num_banks;
 };
 
-void adf_init_hw_data_61mx(struct adf_hw_device_data *hw_data);
+void adf_init_hw_data_61mx(struct adf_hw_device_data *hw_data, u32 num_banks);
 void adf_clean_hw_data_61mx(struct adf_hw_device_data *hw_data);
+void adf_61mx_init_hw_csr_ops(struct adf_hw_csr_ops *csr_ops);
+int adf_61mx_alloc_irq(struct adf_accel_dev *accel_dev);
+void adf_61mx_free_irq(struct adf_accel_dev *accel_dev);
 
 #endif /* ADF_61MX_HW_DATA_H_ */

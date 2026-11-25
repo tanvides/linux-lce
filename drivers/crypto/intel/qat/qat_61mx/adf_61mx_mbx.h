@@ -5,6 +5,7 @@
 #define ADF_61MX_MBX_H_
 
 #include <linux/bitfield.h>
+#include <linux/interrupt.h>
 
 struct adf_61mx_dev;
 
@@ -46,5 +47,7 @@ int adf_61mx_mbx_request_version(struct adf_61mx_dev *hwdev);
 int adf_61mx_mbx_fetch_id(struct adf_61mx_dev *hwdev);
 int adf_61mx_mbx_num_vf(struct adf_61mx_dev *hwdev);
 int adf_61mx_mbx_alloc_qs(struct adf_61mx_dev *hwdev);
+
+irqreturn_t adf_61mx_mbx_isr(int irq, void *dev_ptr);
 
 #endif /* ADF_61MX_MBX_H_ */
