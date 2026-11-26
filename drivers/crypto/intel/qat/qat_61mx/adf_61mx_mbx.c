@@ -2,6 +2,7 @@
 /* Copyright(c) 2026 Intel Corporation */
 
 #include <linux/iopoll.h>
+#include <linux/interrupt.h>
 #include <linux/mutex.h>
 
 #include "adf_61mx_hw_data.h"
@@ -151,3 +152,17 @@ void adf_61mx_mbx_disable(struct adf_61mx_dev *hwdev)
 	ADF_CSR_WR(hwdev->iobase, ADF_61MX_PF_INT_MASK, ~0U);
 }
 
+irqreturn_t adf_61mx_mbx_isr(int irq, void *dev_ptr)
+{
+	struct adf_accel_dev *accel_dev = dev_ptr;
+	struct adf_61mx_dev *hwdev = pci_get_drvdata(accel_to_pci_dev(accel_dev));
+
+	/*
+	 * Mailbox exchanges are polled before the interrupt is requested, so
+	 * only unsolicited CPF notifications get here. The PF does not act on
+	 * them; clear them so that the line does not stay asserted.
+	 */
+	ADF_CSR_WR(hwdev->iobase, ADF_61MX_MBX_CPF2APF, 0);
+
+	return IRQ_HANDLED;
+}
