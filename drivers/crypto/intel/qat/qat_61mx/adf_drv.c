@@ -76,9 +76,37 @@ static int adf_61mx_cpf_connect(struct adf_61mx_dev *hwdev)
 	return ret;
 }
 
+static void adf_61mx_pci_reset_prepare(struct pci_dev *pdev)
+{
+	struct adf_61mx_dev *hwdev = pci_get_drvdata(pdev);
+	struct adf_accel_dev *accel_dev = hwdev->accel_dev;
+
+	set_bit(ADF_STATUS_RESTARTING, &accel_dev->status);
+	hwdev->restart = adf_dev_started(accel_dev);
+	if (hwdev->restart)
+		adf_dev_down(accel_dev);
+}
+
 static void adf_61mx_pci_reset_done(struct pci_dev *pdev)
 {
-	adf_61mx_pf_wait_for_reset(pci_get_drvdata(pdev));
+	struct adf_61mx_dev *hwdev = pci_get_drvdata(pdev);
+	struct adf_accel_dev *accel_dev = hwdev->accel_dev;
+	int ret;
+
+	adf_61mx_pf_wait_for_reset(hwdev);
+	adf_61mx_mbx_enable(hwdev);
+
+	ret = adf_61mx_cpf_connect(hwdev);
+	if (ret >= 0 && ret != hwdev->num_banks) {
+		dev_err(&pdev->dev, "CPF ring pair assignment changed\n");
+		ret = -EINVAL;
+	}
+	if (ret >= 0 && hwdev->restart)
+		ret = adf_dev_up(accel_dev, false);
+
+	clear_bit(ADF_STATUS_RESTARTING, &accel_dev->status);
+	if (ret < 0)
+		dev_err(&pdev->dev, "Failed to recover from reset: %d\n", ret);
 }
 
 static int adf_61mx_sriov_configure(struct pci_dev *pdev, int vfs)
@@ -320,6 +348,7 @@ static void adf_shutdown(struct pci_dev *pdev)
 }
 
 static const struct pci_error_handlers adf_61mx_err_handler = {
+	.reset_prepare = adf_61mx_pci_reset_prepare,
 	.reset_done = adf_61mx_pci_reset_done,
 };
 
