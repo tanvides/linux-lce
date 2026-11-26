@@ -19,11 +19,13 @@ struct adf_61mx_dev;
 
 /* PF->CPF message types (values fixed by the CPF firmware protocol) */
 #define ADF_61MX_MBX_OP_PF_COMPAT_VERSION	4
+#define ADF_61MX_MBX_OP_PF_SRIOV_VF		5
 #define ADF_61MX_MBX_OP_PF_QS_ALLOC		6
 #define ADF_61MX_MBX_OP_PF_IDENTIFY		11
 
 /* CPF->PF response types */
 #define ADF_61MX_MBX_RESP_COMPAT_VERSION	2
+#define ADF_61MX_MBX_RESP_SRIOV_VF		4
 #define ADF_61MX_MBX_RESP_QS_ALLOC		5
 #define ADF_61MX_MBX_RESP_IDENTIFY		6
 
@@ -42,6 +44,7 @@ void adf_61mx_mbx_disable(struct adf_61mx_dev *hwdev);
 
 int adf_61mx_mbx_request_version(struct adf_61mx_dev *hwdev);
 int adf_61mx_mbx_fetch_id(struct adf_61mx_dev *hwdev);
+int adf_61mx_mbx_num_vf(struct adf_61mx_dev *hwdev);
 int adf_61mx_mbx_alloc_qs(struct adf_61mx_dev *hwdev);
 
 #endif /* ADF_61MX_MBX_H_ */

@@ -80,6 +80,21 @@ static void adf_61mx_pci_reset_done(struct pci_dev *pdev)
 	adf_61mx_pf_wait_for_reset(pci_get_drvdata(pdev));
 }
 
+static int adf_61mx_sriov_configure(struct pci_dev *pdev, int vfs)
+{
+	int ret;
+
+	if (vfs > 0) {
+		ret = pci_enable_sriov(pdev, vfs);
+		return ret ? ret : vfs;
+	}
+
+	if (pci_num_vf(pdev))
+		pci_disable_sriov(pdev);
+
+	return 0;
+}
+
 static void adf_dbgfs_cleanup(void *accel_dev)
 {
 	adf_dbgfs_exit(accel_dev);
@@ -110,6 +125,11 @@ static void adf_61mx_mbx_teardown(void *hwdev)
 	adf_61mx_mbx_disable(hwdev);
 }
 
+static void adf_61mx_disable_sriov(void *pdev)
+{
+	pci_disable_sriov(pdev);
+}
+
 /*
  * Negotiate with the CPF over the polled mailbox. This must complete before
  * adf_dev_up(): the number of ring bundles assigned by the CPF is needed to
@@ -118,6 +138,7 @@ static void adf_61mx_mbx_teardown(void *hwdev)
 static int adf_61mx_cpf_init(struct adf_61mx_dev *hwdev)
 {
 	struct device *dev = &hwdev->pdev->dev;
+	int max_vfs;
 	int ret;
 
 	ret = devm_mutex_init(dev, &hwdev->mbx_lock);
@@ -135,6 +156,17 @@ static int adf_61mx_cpf_init(struct adf_61mx_dev *hwdev)
 		return dev_err_probe(dev, ret, "CPF negotiation failed.\n");
 	hwdev->num_banks = ret;
 	dev_dbg(dev, "CPF assigned %u ring pairs\n", hwdev->num_banks);
+
+	max_vfs = adf_61mx_mbx_num_vf(hwdev);
+	if (max_vfs < 0)
+		return dev_err_probe(dev, max_vfs, "Failed to get number of VFs.\n");
+	if (max_vfs > ADF_61MX_APF_SRIOV_VF_MAX)
+		return dev_err_probe(dev, -EINVAL,
+				     "Invalid number of SR-IOV VFs: %d.\n", max_vfs);
+
+	ret = pci_sriov_set_totalvfs(hwdev->pdev, max_vfs);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to set total VFs.\n");
 
 	return 0;
 }
@@ -230,7 +262,11 @@ static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	adf_dbgfs_init(accel_dev);
 
-	return devm_add_action_or_reset(dev, adf_dbgfs_cleanup, accel_dev);
+	ret = devm_add_action_or_reset(dev, adf_dbgfs_cleanup, accel_dev);
+	if (ret)
+		return ret;
+
+	return devm_add_action_or_reset(dev, adf_61mx_disable_sriov, pdev);
 }
 
 static const struct pci_error_handlers adf_61mx_err_handler = {
@@ -241,6 +277,7 @@ static struct pci_driver adf_driver = {
 	.id_table = adf_pci_tbl,
 	.name = ADF_61MX_DEVICE_NAME,
 	.probe = adf_probe,
+	.sriov_configure = adf_61mx_sriov_configure,
 	.err_handler = &adf_61mx_err_handler,
 };
 module_pci_driver(adf_driver);

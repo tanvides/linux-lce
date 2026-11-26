@@ -118,6 +118,17 @@ int adf_61mx_mbx_fetch_id(struct adf_61mx_dev *hwdev)
 	return 0;
 }
 
+int adf_61mx_mbx_num_vf(struct adf_61mx_dev *hwdev)
+{
+	u32 resp;
+	int ret;
+
+	ret = adf_61mx_mbx_xchange(hwdev, ADF_61MX_MBX_OP_PF_SRIOV_VF, 0,
+				   ADF_61MX_MBX_RESP_SRIOV_VF, &resp);
+
+	return ret ? ret : resp;
+}
+
 int adf_61mx_mbx_alloc_qs(struct adf_61mx_dev *hwdev)
 {
 	u32 resp;
