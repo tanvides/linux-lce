@@ -10,6 +10,12 @@
 
 #include <adf_accel_devices.h>
 
+/*
+ * Upper limit on VFs advertised by the APF; the CPF-side firmware
+ * cannot expose more than this per PF regardless of BAR configuration.
+ */
+#define ADF_61MX_APF_SRIOV_VF_MAX		1024
+
 /* CPF <-> APF mailbox and misc-interrupt-mask registers (BAR0). */
 #define ADF_61MX_PF_INT_MASK			0x01100004U
 #define ADF_61MX_PF_INT_CPF2APF			BIT_U32(1)
