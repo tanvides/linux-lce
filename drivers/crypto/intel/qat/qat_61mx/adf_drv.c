@@ -136,7 +136,7 @@ static void adf_61mx_disable_sriov(void *pdev)
 	pci_disable_sriov(pdev);
 }
 
-/* Crypto services run on VFs; the PF offloads none of them */
+/* Crypto services run on VFs; only compression is offloaded by the PF */
 static int adf_61mx_cfg_dev_init(struct adf_accel_dev *accel_dev)
 {
 	int ret;
@@ -148,7 +148,8 @@ static int adf_61mx_cfg_dev_init(struct adf_accel_dev *accel_dev)
 	return adf_cfg_add_key_value_param(accel_dev, ADF_GENERAL_SEC,
 					   ADF_SERVICES_ENABLED,
 					   ADF_CFG_SYM ADF_SERVICES_DELIMITER
-					   ADF_CFG_ASYM,
+					   ADF_CFG_ASYM ADF_SERVICES_DELIMITER
+					   ADF_CFG_DC,
 					   ADF_STR);
 }
 

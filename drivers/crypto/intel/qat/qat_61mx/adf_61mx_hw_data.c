@@ -7,8 +7,12 @@
 #include <adf_cfg.h>
 #include <adf_cfg_services.h>
 #include <adf_common_drv.h>
+#include <adf_dc.h>
 #include <adf_gen6_shared.h>
 
+#include "icp_qat_fw_comp.h"
+
+#include "adf_61mx_fw.h"
 #include "adf_61mx_hw_data.h"
 
 #define ADF_61MX_NUM_RINGS_PER_BANK	2
@@ -58,7 +62,7 @@ static enum dev_sku_info get_sku(struct adf_hw_device_data *self)
 
 static u32 get_accel_cap(struct adf_accel_dev *accel_dev)
 {
-	return 0;
+	return ADF_ACCEL_CAPABILITIES_COMPRESSION;
 }
 
 static void enable_error_correction(struct adf_accel_dev *accel_dev)
@@ -96,13 +100,15 @@ static int enable_pfvf_comms(struct adf_accel_dev *accel_dev)
 
 static bool services_supported(unsigned long mask)
 {
-	const unsigned long supported = BIT(SVC_SYM) | BIT(SVC_ASYM);
+	const unsigned long supported = BIT(SVC_SYM) | BIT(SVC_ASYM) |
+					BIT(SVC_DC) | BIT(SVC_DECOMP);
 
 	return mask && !(mask & ~supported);
 }
 
 static int adf_61mx_dev_config(struct adf_accel_dev *accel_dev)
 {
+	unsigned long mask;
 	int ret;
 
 	if (!GET_HW_DATA(accel_dev)->num_banks)
@@ -117,7 +123,12 @@ static int adf_61mx_dev_config(struct adf_accel_dev *accel_dev)
 		return ret;
 
 	/* Crypto is serviced by VF users only; the PF registers no crypto algs */
-	ret = adf_gen6_no_dev_config(accel_dev);
+	if (adf_get_service_mask(accel_dev, &mask))
+		ret = -EINVAL;
+	else if (test_bit(SVC_DC, &mask) || test_bit(SVC_DECOMP, &mask))
+		ret = adf_gen6_comp_dev_config(accel_dev);
+	else
+		ret = adf_gen6_no_dev_config(accel_dev);
 	if (ret) {
 		dev_err(&GET_DEV(accel_dev), "Failed to configure device\n");
 		return ret;
@@ -125,6 +136,62 @@ static int adf_61mx_dev_config(struct adf_accel_dev *accel_dev)
 
 	set_bit(ADF_STATUS_CONFIGURED, &accel_dev->status);
 	return 0;
+}
+
+static_assert(sizeof(struct adf_61mx_fw_comp_req) ==
+	      sizeof(struct icp_qat_fw_comp_req));
+
+static void adf_61mx_build_req_tmpl(void *ctx, u8 cmd_id, u32 comp_cfg,
+				    u32 cmp_flags)
+{
+	struct adf_61mx_fw_comp_req *req = ctx;
+	struct icp_qat_fw_comn_req_hdr hdr = req->comn_hdr;
+
+	memset(req, 0, sizeof(*req));
+
+	req->comn_hdr.hdr_flags = hdr.hdr_flags;
+	req->comn_hdr.service_type = hdr.service_type;
+	ADF_61MX_FW_HDR_GEN_FLAG_SET(req->comn_hdr, ADF_61MX_FW_GEN_5);
+	req->comn_hdr.service_cmd_id = cmd_id;
+	req->comn_hdr.comn_req_flags =
+		ICP_QAT_FW_COMN_FLAGS_BUILD(QAT_COMN_CD_FLD_TYPE_64BIT_ADR,
+					    QAT_COMN_PTR_TYPE_SGL);
+	req->comp_cfg = comp_cfg;
+	req->cmp_flags = cmp_flags;
+}
+
+static int adf_61mx_build_comp_block(void *ctx, enum adf_dc_algo algo)
+{
+	u32 cfg;
+
+	if (algo != QAT_DEFLATE)
+		return -EINVAL;
+
+	cfg = ADF_61MX_FW_COMP_CFG_BUILD(ADF_61MX_FW_COMP_SEARCH_DEPTH_1,
+					 ADF_61MX_FW_COMP_HIST_BUFF_SIZE_32K,
+					 ADF_61MX_FW_COMP_DEFLATE_TYPE_DYNAMIC);
+	adf_61mx_build_req_tmpl(ctx, ADF_61MX_FW_COMP_CMD_DEFLATE_COMP, cfg,
+				ADF_61MX_FW_COMP_FLAG_CNV);
+	return 0;
+}
+
+static int adf_61mx_build_decomp_block(void *ctx, enum adf_dc_algo algo)
+{
+	u32 cfg;
+
+	if (algo != QAT_DEFLATE)
+		return -EINVAL;
+
+	cfg = ADF_61MX_FW_COMP_CFG_BUILD(0, ADF_61MX_FW_COMP_HIST_BUFF_SIZE_32K,
+					 ADF_61MX_FW_COMP_DEFLATE_TYPE_DYNAMIC);
+	adf_61mx_build_req_tmpl(ctx, ADF_61MX_FW_COMP_CMD_DEFLATE_DECOMP, cfg, 0);
+	return 0;
+}
+
+static void adf_61mx_init_dc_ops(struct adf_dc_ops *dc_ops)
+{
+	dc_ops->build_comp_block = adf_61mx_build_comp_block;
+	dc_ops->build_decomp_block = adf_61mx_build_decomp_block;
 }
 
 void adf_init_hw_data_61mx(struct adf_hw_device_data *hw_data, u32 num_banks)
@@ -155,9 +222,11 @@ void adf_init_hw_data_61mx(struct adf_hw_device_data *hw_data, u32 num_banks)
 	hw_data->disable_iov = disable_iov;
 	hw_data->dev_config = adf_61mx_dev_config;
 	hw_data->services_supported = services_supported;
+	hw_data->accel_capabilities_mask = ADF_ACCEL_CAPABILITIES_COMPRESSION;
 	hw_data->pfvf_ops.enable_comms = enable_pfvf_comms;
 
 	adf_61mx_init_hw_csr_ops(&hw_data->csr_ops);
+	adf_61mx_init_dc_ops(&hw_data->dc_ops);
 }
 
 void adf_clean_hw_data_61mx(struct adf_hw_device_data *hw_data)
