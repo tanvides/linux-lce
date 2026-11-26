@@ -29,6 +29,7 @@
  * @iobase:	BAR0 mapping.
  * @mbx_lock:	serializes mailbox exchanges.
  * @num_banks:	number of ring bundles assigned by CPF (from QS_ALLOC).
+ * @restart:	the device was up when a reset started.
  */
 struct adf_61mx_dev {
 	struct adf_accel_dev *accel_dev;
@@ -36,6 +37,7 @@ struct adf_61mx_dev {
 	void __iomem *iobase;
 	struct mutex mbx_lock; /* serialize mailbox exchanges */
 	u32 num_banks;
+	bool restart;
 };
 
 void adf_init_hw_data_61mx(struct adf_hw_device_data *hw_data, u32 num_banks);
