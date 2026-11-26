@@ -81,6 +81,20 @@ config CRYPTO_DEV_QAT_6XXX
 	  To compile this as a module, choose M here: the module
 	  will be called qat_6xxx.
 
+config CRYPTO_DEV_QAT_61MX
+	tristate "Support for Intel(R) QuickAssist Technology QAT_61MX"
+	depends on (X86 || COMPILE_TEST)
+	depends on PCI
+	select CRYPTO_DEV_QAT
+	help
+	  Support for the Intel(R) QuickAssist Technology GEN6.1 physical
+	  functions in the Intel(R) IPU E2100 and E3000, for accelerating
+	  compression workloads. Ring bundles and MSI-X routing are
+	  assigned by a Control PF (CPF) running on the IPU.
+
+	  To compile this as a module, choose M here: the module
+	  will be called qat_61mx.
+
 config CRYPTO_DEV_QAT_DH895xCCVF
 	tristate "Support for Intel(R) DH895xCC Virtual Function"
 	depends on PCI && (!CPU_BIG_ENDIAN || COMPILE_TEST)
