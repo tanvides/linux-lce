@@ -4,7 +4,9 @@
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/iopoll.h>
+#include <linux/limits.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/pci.h>
 
 #include <adf_accel_devices.h>
@@ -13,6 +15,7 @@
 #include <adf_dbgfs.h>
 
 #include "adf_61mx_hw_data.h"
+#include "adf_61mx_mbx.h"
 
 /* PF reset registers */
 #define ADF_61MX_PF_RSTGEN_CTRL		0x0104000CU
@@ -45,6 +48,33 @@ static void adf_61mx_pf_wait_for_reset(struct adf_61mx_dev *hwdev)
 	fsleep(ADF_61MX_PF_RST_CLEAR_US);
 }
 
+/* Return the number of ring pairs the CPF assigned to the PF */
+static int adf_61mx_cpf_connect(struct adf_61mx_dev *hwdev)
+{
+	int ret;
+
+	ret = adf_61mx_mbx_request_version(hwdev);
+	if (ret)
+		return ret;
+
+	ret = adf_61mx_mbx_fetch_id(hwdev);
+	if (ret)
+		return ret;
+
+	ret = adf_61mx_mbx_alloc_qs(hwdev);
+	if (ret < 0)
+		return ret;
+
+	/* hw_data->num_banks is a u8 */
+	if (ret > U8_MAX) {
+		dev_err(&hwdev->pdev->dev, "Invalid number of ring pairs: %d\n",
+			ret);
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
 static void adf_61mx_pci_reset_done(struct pci_dev *pdev)
 {
 	adf_61mx_pf_wait_for_reset(pci_get_drvdata(pdev));
@@ -73,6 +103,40 @@ static void adf_cleanup_hw_data(void *accel_dev)
 static void adf_devmgr_remove(void *accel_dev)
 {
 	adf_devmgr_rm_dev(accel_dev, NULL);
+}
+
+static void adf_61mx_mbx_teardown(void *hwdev)
+{
+	adf_61mx_mbx_disable(hwdev);
+}
+
+/*
+ * Negotiate with the CPF over the polled mailbox. This must complete before
+ * adf_dev_up(): the number of ring bundles assigned by the CPF is needed to
+ * set up the transport.
+ */
+static int adf_61mx_cpf_init(struct adf_61mx_dev *hwdev)
+{
+	struct device *dev = &hwdev->pdev->dev;
+	int ret;
+
+	ret = devm_mutex_init(dev, &hwdev->mbx_lock);
+	if (ret)
+		return ret;
+
+	adf_61mx_mbx_enable(hwdev);
+
+	ret = devm_add_action_or_reset(dev, adf_61mx_mbx_teardown, hwdev);
+	if (ret)
+		return ret;
+
+	ret = adf_61mx_cpf_connect(hwdev);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "CPF negotiation failed.\n");
+	hwdev->num_banks = ret;
+	dev_dbg(dev, "CPF assigned %u ring pairs\n", hwdev->num_banks);
+
+	return 0;
 }
 
 static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -144,6 +208,10 @@ static int adf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	pci_set_master(pdev);
 	adf_61mx_pf_wait_for_reset(hwdev);
+
+	ret = adf_61mx_cpf_init(hwdev);
+	if (ret)
+		return ret;
 
 	accel_dev->hw_device = hw_data;
 	adf_init_hw_data_61mx(hw_data);
